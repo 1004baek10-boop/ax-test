@@ -16,8 +16,18 @@ import demand
 import supply
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SHELTER_CSV = os.path.join(BASE_DIR, "data", "shelters.csv")
-POPULATION_CSV = os.path.join(BASE_DIR, "data", "population_dong.csv")
+
+def find_file(name):
+    """data/ 폴더 또는 app.py와 같은 폴더에서 파일을 찾는다. 없으면 None."""
+    for folder in (os.path.join(BASE_DIR, "data"), BASE_DIR):
+        path = os.path.join(folder, name)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+SHELTER_CSV = find_file("shelters.csv")
+POPULATION_CSV = find_file("population_dong.csv")
 
 BBOX = (36.48, 127.28, 36.80, 127.60)  # 청주시 대략적 범위 (위도 min, 경도 min, 위도 max, 경도 max)
 CENTER = (36.64, 127.49)
@@ -178,6 +188,14 @@ def render_stats():
 def main():
     st.set_page_config(page_title="청주 재난대피소 통합 지도", layout="wide")
     st.title("청주시 재난대피소 통합 지도")
+
+    # 데이터 파일이 없으면 화면에 바로 알려준다 (Streamlit Cloud 로그의 마스킹 방지)
+    missing = [n for n, p in [("shelters.csv", SHELTER_CSV), ("population_dong.csv", POPULATION_CSV)] if p is None]
+    if missing:
+        st.error("다음 파일을 찾지 못했습니다: " + ", ".join(missing))
+        st.info("저장소에 data/ 폴더를 만들고 그 안에 CSV 두 개를 올리거나, app.py와 같은 위치에 올려 주세요.")
+        st.stop()
+
     shelters = load_shelters()
     dongs = load_dongs()
 
