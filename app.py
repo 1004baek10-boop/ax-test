@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from streamlit_folium import st_folium
+from streamlit_geolocation import streamlit_geolocation
 
 import analysis
 import demand
@@ -94,11 +95,22 @@ def render_map(shelters, dongs):
         pick = st.selectbox("기준 동 선택", dong_labels)
         st.caption("동을 고르면 그 동 중심이 기준입니다. '선택 안 함'이면 지도를 클릭한 지점이 기준입니다.")
         st.caption("여유 인원은 시뮬레이션 배정 기준이며 실시간 혼잡도가 아닙니다.")
+        st.markdown("**📍 내 위치로 찾기**")
+        st.caption("버튼을 누른 뒤 브라우저의 위치 권한을 허용하세요. 동 선택이 '선택 안 함'일 때 적용됩니다.")
+        loc = streamlit_geolocation()
 
     origin, origin_label = CENTER, "청주시 중심"
     if pick != NO_DONG:
         r = dongs.iloc[dong_labels.index(pick) - 1]
         origin, origin_label = (r["위도"], r["경도"]), pick
+
+    # GPS 위치 (동 미선택 시). 청주 범위 밖이면 안내만 하고 기준은 바꾸지 않는다.
+    gps_lat, gps_lon = (loc or {}).get("latitude"), (loc or {}).get("longitude")
+    if pick == NO_DONG and gps_lat is not None and gps_lon is not None:
+        if in_cheongju(gps_lat, gps_lon):
+            origin, origin_label = (gps_lat, gps_lon), "내 위치 (GPS)"
+        else:
+            st.warning("현재 위치가 청주시 범위 밖입니다. 동을 선택하거나 지도를 클릭해 주세요.")
 
     m = folium.Map(location=CENTER, zoom_start=11)
     m.fit_bounds([[BBOX[0], BBOX[1]], [BBOX[2], BBOX[3]]])
