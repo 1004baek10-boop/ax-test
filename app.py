@@ -5,9 +5,10 @@
 """
 import os
 
+from urllib.parse import quote
+
 import folium
 import numpy as np
-import requests
 import pandas as pd
 import streamlit as st
 from streamlit_folium import st_folium
@@ -86,23 +87,6 @@ def recommend(df, lat, lon, k=5, only_available=False):
     if only_available:
         out = out[out["여유인원"] > 0]
     return out.sort_values("거리(m)").head(k)
-
-
-@st.cache_data(ttl=600, show_spinner=False)
-def get_walk_route(lat1, lon1, lat2, lon2):
-    """OSRM 공개 서버로 도보 경로를 받는다. 실패하면 None (호출 측에서 직선으로 대체)."""
-    url = f"https://router.project-osrm.org/route/v1/foot/{lon1},{lat1};{lon2},{lat2}"
-    try:
-        res = requests.get(url, params={"overview": "full", "geometries": "geojson"}, timeout=5)
-        res.raise_for_status()
-        data = res.json()
-        if data.get("code") != "Ok" or not data.get("routes"):
-            return None
-        r = data["routes"][0]
-        coords = [(c[1], c[0]) for c in r["geometry"]["coordinates"]]  # GeoJSON은 [경도, 위도]
-        return {"coords": coords, "distance": r["distance"], "minutes": r["duration"] / 60}
-    except Exception:
-        return None
 
 
 # ---------- 탭 1: 지도 ----------
@@ -188,23 +172,19 @@ def render_map(shelters, dongs):
             st.success("여유가 있는 대피소입니다.")
 
     if sel is not None:
-        st.markdown("**🚶 도보 경로 (기준 위치 → 선택한 대피소)**")
-        route = get_walk_route(origin[0], origin[1], sel["위도"], sel["경도"])
-        rm = folium.Map(
-            location=[(origin[0] + sel["위도"]) / 2, (origin[1] + sel["경도"]) / 2], zoom_start=14
+        st.markdown("**🚶 길찾기 (외부 지도 앱)**")
+        d_lat, d_lon, d_name = sel["위도"], sel["경도"], sel["시설명"]
+        g_url = (
+            "https://www.google.com/maps/dir/?api=1"
+            f"&origin={origin[0]},{origin[1]}&destination={d_lat},{d_lon}&travelmode=walking"
         )
-        folium.Marker(origin, tooltip=f"출발: {origin_label}", icon=folium.Icon(color="blue", icon="user")).add_to(rm)
-        folium.Marker(
-            [sel["위도"], sel["경도"]], tooltip=f"도착: {sel['시설명']}", icon=folium.Icon(color="red", icon="flag")
-        ).add_to(rm)
-        if route:
-            folium.PolyLine(route["coords"], color="#1f77b4", weight=5).add_to(rm)
-            st.write(f"실제 도보 경로: 약 {route['distance']:,.0f}m, 약 {route['minutes']:.0f}분 (OSRM 보행 경로)")
-        else:
-            folium.PolyLine([origin, [sel["위도"], sel["경도"]]], color="gray", weight=3, dash_array="6").add_to(rm)
-            st.caption("경로 서비스에 연결하지 못해 직선으로 표시합니다. 실제 도보 거리는 더 길 수 있습니다.")
-        rm.fit_bounds([[origin[0], origin[1]], [sel["위도"], sel["경도"]]])
-        st_folium(rm, width=900, height=400, key="route_map", returned_objects=[])
+        k_url = f"https://map.kakao.com/link/to/{quote(d_name)},{d_lat},{d_lon}"
+        c1, c2 = st.columns(2)
+        with c1:
+            st.link_button("Google 지도 도보 길찾기", g_url)
+        with c2:
+            st.link_button("카카오맵 길찾기", k_url)
+        st.caption(f"Google 지도는 출발지를 현재 기준 위치({origin_label})로 설정합니다. 카카오맵은 별도 출발지 설정이 필요하면 앱에서 현재 위치를 사용하세요.")
 
     st.subheader("가까운 대피소 목록")
     near = recommend(shelters, origin[0], origin[1], k=10)
